@@ -1,0 +1,14 @@
+{
+  "name": "com.ultracombos.art-net",
+  "version": "1.0.0",
+  "displayName": "Art Net",
+  "description": "Art Net",
+  "repository": "",
+  "type": "library",
+  "author": {
+    "name": "Ultra Combos Co., Ltd.",
+    "email": "tech@ultracombos.com",
+    "url": "https://ultracombos.com"
+  },
+  "dependencies": {}
+}
