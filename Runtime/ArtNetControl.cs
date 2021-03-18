@@ -2,49 +2,187 @@ using Haukcode.ArtNet;
 using Haukcode.ArtNet.Packets;
 using Haukcode.ArtNet.Sockets;
 using Haukcode.Sockets;
+using System;
 using System.Collections;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using System.Threading.Tasks;
 using Unity.Collections;
 using UnityEngine;
 
 namespace UltraCombos.ArtNet
 {
+    [System.Serializable]
+    public class ArtNetUniverse
+    {
+        public short universe =1;
+        public bool supportSequence = true;
+        public bool  dirty;
+        public DateTime sendingTime;        
+        public byte this[int ch]
+        {
+            set  {
+                data[ch] = value;
+                dirty = true;
+            }
+            get => data[ch];
+        }
+        public void Trigger(int ch)
+        {
+            trigger[ch] = TriggerState.NEED_HIGH;
+        }
+        public byte[] data { get; } = new byte[512];
+        //public byte[] data = new byte[512];
+        public TriggerState[] trigger { get; } = new TriggerState[512];
+
+        public enum TriggerState
+        {
+            NONE,
+            NEED_HIGH,
+            NEED_LOW
+        }
+    }
 	public class ArtNetControl : MonoBehaviour
 	{
 		public string localIp = "10.0.0.100";
 		public string localSubnetMask = "255.255.255.0";
 		public string target = "10.0.0.100";
-
-		NativeArray<byte> data;
-
-		[Header( "Debug" )]
+        public const float RESEND_SECONDS = 4;
+        
+        public List<ArtNetUniverse> universeList = new List<ArtNetUniverse>() { new ArtNetUniverse()};
+        
+        [Header( "Debug" )]
 		public bool send = false;
 		public bool trigger = false;
 		public string info;
 		public int testUniverse = 1;
 		public int testChannel = 1;
 
+        ArtNetSocket socket;
 		CancellationTokenSource cts = new CancellationTokenSource();
-		Thread thread;
+		//Thread thread;
 
 		ConcurrentQueue<ArtNetPacket> sendQueue = new ConcurrentQueue<ArtNetPacket>();
 		ConcurrentQueue<NewPacketEventArgs<ArtNetPacket>> receivedQueue = new ConcurrentQueue<NewPacketEventArgs<ArtNetPacket>>();
 		ConcurrentQueue<string> messages = new ConcurrentQueue<string>();
 
-		float timestamp;
-		int fps = 15;
+        float targetFPS = 1;
 
-		private void Start()
+        private void Start()
 		{
-			data = new NativeArray<byte>( 512, Allocator.Persistent );
+            socket = new ArtNetSocket() { EnableBroadcast = true };
+            socket.NewPacket += (sender, e) => receivedQueue.Enqueue(e);
 
-			thread = new Thread( () => ThreadingFunction( target, cts.Token ) );
-			thread.Start();
-		}
+            Task.Factory.StartNew(() => 
+            {
+                bool verbose = false;
+                var watch = new System.Diagnostics.Stopwatch();
+                watch.Restart();
+                
+                
+                long pre_count = 0;
+                long real_count = 0;
+
+                
+                while (cts.IsCancellationRequested == false)
+                {
+                    var seconds = watch.ElapsedMilliseconds / 1000.0;
+                    var count = (long)(seconds * targetFPS);
+                    if (pre_count < count)
+                    {
+                    
+                        if(verbose){ 
+                            var frame = count - pre_count;
+                            if (frame > 1)
+                                Debug.Log($"drop {frame - 1} frame{(frame > 2 ? "s" : "")}, targetFps = {targetFPS}, fps = {real_count / seconds}");
+                            else
+                                Debug.Log($"targetFps = {targetFPS}, fps = {real_count / seconds}");
+                        }
+                        byte sequence = (byte)(real_count % 254 + 1);
+
+                        SendPackets(sequence);
+
+                        ++real_count;
+                        pre_count = count;                        
+                    }
+                    else
+                    {                        
+                        float dt = 1000 / targetFPS;
+                        int millis = System.Math.Max((int)(dt / 4), 1);
+                        if (verbose)
+                        {
+                            Debug.Log($"millis = {millis}");
+                        }
+                        Thread.Sleep(millis);
+                    }
+                }
+            }, cts.Token);
+        }
+
+        void SendPackets(byte sequence )
+        {
+            try
+            {
+                var now = DateTime.Now;
+                for (int i = 0; i < universeList.Count; ++i)
+                {
+
+                    for(int ch=0;ch<universeList[i].trigger.Length;++ch)
+                    {
+                        switch(universeList[i].trigger[ch])
+                        {
+                            case ArtNetUniverse.TriggerState.NEED_HIGH:
+                                universeList[i].trigger[ch] = ArtNetUniverse.TriggerState.NEED_LOW;
+                                universeList[i][ch] = 255;
+                                Debug.Log($"Trigger channel {ch} to high,{universeList[i][ch]}");
+                                break;
+                            case ArtNetUniverse.TriggerState.NEED_LOW:
+                                universeList[i].trigger[ch] = ArtNetUniverse.TriggerState.NONE;
+                                universeList[i][ch] = 0;
+                                Debug.Log($"Trigger channel {ch} to low");
+                                break;
+                        }
+                    }
+
+                    if ((now - universeList[i].sendingTime).TotalSeconds > RESEND_SECONDS)
+                    {
+                        Debug.Log($"over {RESEND_SECONDS} seconds, send again!!!");
+                        universeList[i].dirty = true;
+                    }
+                    if (universeList[i].dirty)
+                    {
+                        universeList[i].sendingTime = now;
+                        Debug.Log($"send[{universeList[i][0]}]");
+
+                        var packet = new ArtNetDmxPacket
+                        {
+                            Sequence = universeList[i].supportSequence ? sequence : (byte)0,
+                            Physical = 0,
+                            Universe = universeList[i].universe,
+                            DmxData = universeList[i].data,
+                        };
+
+                        if (IPAddress.TryParse(target, out var ip))
+                        {
+                            socket.Send(packet, new RdmEndPoint(ip));
+                        }
+                        else
+                        {
+                            socket.Send(packet);
+                        }
+
+                        universeList[i].dirty = false;
+                    }
+                }
+            }catch(Exception err)
+            {
+                Debug.LogError(err.Message+"\n"+err.StackTrace);
+            }
+        }
 
 		private void Update()
 		{
@@ -68,7 +206,7 @@ namespace UltraCombos.ArtNet
 				}
 				*/
 			}
-
+            /*
 			if ( send )
 			{
 				if (Time.time - timestamp > 1.0f / fps)
@@ -91,8 +229,9 @@ namespace UltraCombos.ArtNet
 				DelayTrigger( testUniverse, testChannel, 0, 2.5f );
 				Debug.Log( $"ArtNet trigger: U{testUniverse}C{testChannel}" );
 			}
+            */
 		}
-
+        /*
 		public void DelayTrigger(int universe, int channel, float delay, float duration)
 		{
 			StartCoroutine( DoDelayTrigger( universe, channel, delay, duration ) );
@@ -105,21 +244,50 @@ namespace UltraCombos.ArtNet
 			yield return new WaitForSeconds( duration );
 			Set( universe, channel, 0 );
 		}
-
+        */
 		private void OnDestroy()
 		{
 			cts.Cancel();
-			thread.Join();
+//			thread.Join();
 			cts.Dispose();
 
-			data.Dispose();
+			//data.Dispose();
 		}
 
+        public void Set(ushort universe, int channel, byte value, int physical = 0)
+        {
+            var found = universeList.Find((u) => u.universe == universe);
+            if (found == null)
+            {
+                Debug.LogError($"Can't find universe {universe}");
+                return;
+            }
+            if(channel<1 || channel >512)
+            {
+                Debug.LogError("Channel is out of bound. "+ channel);
+            }
+            found[channel - 1] = value;            
+        }
+        public void Trigger(ushort universe, int channel)
+        {
+            var found = universeList.Find((u) => u.universe == universe);
+            if (found == null)
+            {
+                Debug.LogError($"Can't find universe {universe}");
+                return;
+            }
+            if (channel < 1 || channel > 512)
+            {
+                Debug.LogError("Channel is out of bound. " + channel);
+            }
+            found.Trigger(channel-1);
+        }
+        /*
 		public void SendPacket(ArtNetDmxPacket packet)
 		{
 			sendQueue.Enqueue( packet );
 		}
-
+        
 		public void Set(int universe, int channel, int value, int sequence = 0, int physical = 0)
 		{
 			var ch = Mathf.Clamp( channel - 1, 0, data.Length - 1 );
@@ -155,8 +323,8 @@ namespace UltraCombos.ArtNet
 		{
 			try
 			{
-				const int fps = 30;
-				int dt = 1000 / fps;
+				const int FPS = 44;
+				int dt = 1000 / FPS;
 				using ( var socket = new ArtNetSocket() { EnableBroadcast = true } )
 				{
 					socket.NewPacket += (sender, e) => receivedQueue.Enqueue( e );
@@ -212,6 +380,7 @@ namespace UltraCombos.ArtNet
 
 
 		}
+        */
 	}
 
 }
