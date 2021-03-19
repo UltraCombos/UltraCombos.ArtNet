@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Unity.Collections;
@@ -70,7 +71,7 @@ namespace UltraCombos.ArtNet
 		ConcurrentQueue<NewPacketEventArgs<ArtNetPacket>> receivedQueue = new ConcurrentQueue<NewPacketEventArgs<ArtNetPacket>>();
 		ConcurrentQueue<string> messages = new ConcurrentQueue<string>();
 
-        float targetFPS = 1;
+        const float ARTNET_FPS = 44;
 
         private void Start()
 		{
@@ -91,16 +92,16 @@ namespace UltraCombos.ArtNet
                 while (cts.IsCancellationRequested == false)
                 {
                     var seconds = watch.ElapsedMilliseconds / 1000.0;
-                    var count = (long)(seconds * targetFPS);
+                    var count = (long)(seconds * ARTNET_FPS);
                     if (pre_count < count)
                     {
                     
                         if(verbose){ 
                             var frame = count - pre_count;
                             if (frame > 1)
-                                Debug.Log($"drop {frame - 1} frame{(frame > 2 ? "s" : "")}, targetFps = {targetFPS}, fps = {real_count / seconds}");
+                                Debug.Log($"drop {frame - 1} frame{(frame > 2 ? "s" : "")}, targetFps = {ARTNET_FPS}, fps = {real_count / seconds}");
                             else
-                                Debug.Log($"targetFps = {targetFPS}, fps = {real_count / seconds}");
+                                Debug.Log($"targetFps = {ARTNET_FPS}, fps = {real_count / seconds}");
                         }
                         byte sequence = (byte)(real_count % 254 + 1);
 
@@ -111,7 +112,7 @@ namespace UltraCombos.ArtNet
                     }
                     else
                     {                        
-                        float dt = 1000 / targetFPS;
+                        float dt = 1000 / ARTNET_FPS;
                         int millis = System.Math.Max((int)(dt / 4), 1);
                         if (verbose)
                         {
@@ -156,7 +157,7 @@ namespace UltraCombos.ArtNet
                     if (universeList[i].dirty)
                     {
                         universeList[i].sendingTime = now;
-                        Debug.Log($"send[{universeList[i][0]}]");
+                        //Debug.Log($"send data[0]={universeList[i][0]}");
 
                         var packet = new ArtNetDmxPacket
                         {
@@ -222,6 +223,7 @@ namespace UltraCombos.ArtNet
 					Set( testUniverse, data );
 				}				
 			}
+            
 			if ( trigger )
 			{
 				trigger = false;
@@ -266,8 +268,20 @@ namespace UltraCombos.ArtNet
             {
                 Debug.LogError("Channel is out of bound. "+ channel);
             }
-            found[channel - 1] = value;            
+            found[channel - 1] = value;
         }
+        public void Set(int universe, byte[] data, int sequence = 0, int physical = 0)
+        {
+            var found = universeList.Find((u) => u.universe == universe);
+            if (found == null)
+            {
+                Debug.LogError($"Can't find universe {universe}");
+                return;
+            }
+            for (int i = 0; i < found.data.Length; ++i)
+                found[i] = data[i];
+        }
+
         public void Trigger(ushort universe, int channel)
         {
             var found = universeList.Find((u) => u.universe == universe);
