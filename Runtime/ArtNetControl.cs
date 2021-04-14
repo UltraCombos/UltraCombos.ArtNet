@@ -169,6 +169,7 @@ namespace UltraCombos.ArtNet
 
                         if (IPAddress.TryParse(target, out var ip))
                         {
+                            socket.EnableBroadcast = true;
                             socket.Send(packet, new RdmEndPoint(ip));
                         }
                         else
