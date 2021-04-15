@@ -20,24 +20,31 @@ namespace UltraCombos.ArtNet
     [System.Serializable]
     public class ArtNetUniverse
     {
-        public short universe =1;
+        public short universe = 1;
         public bool supportSequence = true;
-        public bool  dirty;
-        public DateTime sendingTime;        
+        public bool dirty;
+        public DateTime sendingTime;
         public byte this[int ch]
         {
-            set  {
+            set {
                 data[ch] = value;
                 dirty = true;
             }
             get => data[ch];
         }
-        public void Trigger(int ch)
+        public void Trigger(int ch, int keepHighFrameNum= 10)
         {
-            trigger[ch] = TriggerState.NEED_HIGH;
+            //trigger[ch] = TriggerState.NEED_HIGH;
+            this.keepHighFrameNum[ch] = keepHighFrameNum;
         }
         public byte[] data { get; } = new byte[512];
+        public ArtNetUniverse()
+        {
+            for (int i= 0;i< keepHighFrameNum.Length;++i)
+                keepHighFrameNum[i] = -1;
+        }
         //public byte[] data = new byte[512];
+        /*
         public TriggerState[] trigger { get; } = new TriggerState[512];
 
         public enum TriggerState
@@ -46,6 +53,8 @@ namespace UltraCombos.ArtNet
             NEED_HIGH,
             NEED_LOW
         }
+        */
+        public int[] keepHighFrameNum { get; } = new int[512];
     }
 	public class ArtNetControl : MonoBehaviour
 	{
@@ -132,8 +141,26 @@ namespace UltraCombos.ArtNet
                 for (int i = 0; i < universeList.Count; ++i)
                 {
 
-                    for(int ch=0;ch<universeList[i].trigger.Length;++ch)
+                    for(int ch=0;ch<universeList[i].keepHighFrameNum.Length;++ch)
                     {
+                        if(universeList[i].keepHighFrameNum[ch]>0)
+                        {
+                            --universeList[i].keepHighFrameNum[ch];
+                            if (universeList[i][ch] != 255)
+                            {
+                                universeList[i][ch] = 255;
+                                Debug.Log($"Trigger channel {ch} to high,{universeList[i][ch]}");
+                                
+                            }
+                        }else if(universeList[i].keepHighFrameNum[ch]==0)
+                        {
+                            --universeList[i].keepHighFrameNum[ch];
+                            universeList[i][ch] = 0;
+                            Debug.Log($"Trigger channel {ch} to low, {universeList[i][ch]}");
+                            
+                        }                        
+                        /*
+
                         switch(universeList[i].trigger[ch])
                         {
                             case ArtNetUniverse.TriggerState.NEED_HIGH:
@@ -147,7 +174,9 @@ namespace UltraCombos.ArtNet
                                 Debug.Log($"Trigger channel {ch} to low");
                                 break;
                         }
+                        */
                     }
+                    //Debug.Log("universeList[0][0] = " + universeList[0][0]+ ", keepHighFrameNum = "+ universeList[i].keepHighFrameNum[0]);
 
                     if ((now - universeList[i].sendingTime).TotalSeconds > RESEND_SECONDS)
                     {
