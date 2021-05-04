@@ -83,7 +83,6 @@ namespace UltraCombos.ArtNet
 							package.universe = universe;
 							dmx.DmxData.CopyTo( package.data, 0 );
 							//package.data.CopyFrom( dmx.DmxData );
-							Debug.Log(dmx.Universe);
 						}
 						break;
 				}
