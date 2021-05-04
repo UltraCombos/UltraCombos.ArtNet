@@ -1,7 +1,6 @@
-using Haukcode.ArtNet;
-using Haukcode.ArtNet.Packets;
-using Haukcode.ArtNet.Sockets;
-using Haukcode.Sockets;
+using LXProtocols.Acn.Sockets;
+using LXProtocols.ArtNet.Packets;
+using LXProtocols.ArtNet.Sockets;
 using System;
 using System.Collections;
 using System.Collections.Concurrent;
@@ -84,7 +83,7 @@ namespace UltraCombos.ArtNet
 
         private void Start()
 		{
-            socket = new ArtNetSocket() { EnableBroadcast = true };
+            socket = new ArtNetSocket(new LXProtocols.Acn.Rdm.UId(0, 0)) { EnableBroadcast = true };
             socket.NewPacket += (sender, e) => receivedQueue.Enqueue(e);
 
             Task.Factory.StartNew(() => 
