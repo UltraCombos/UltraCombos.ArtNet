@@ -6,6 +6,7 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
+using System.Net.Sockets;
 using Unity.Collections;
 using UnityEngine;
 
@@ -21,10 +22,15 @@ namespace UltraCombos.ArtNet
 
     public class ArtNetReceiver : MonoBehaviour
     {
-        public string localIp = "10.0.0.100";
-        public string localSubnetMask = "255.255.255.0";
+        public string host = "10.0.0.100";
+        IPAddress localIp;
+        IPAddress localSubnetMask;
 
         ArtNetSocket socket;
+        ArtPollReplyPacket pollReply;
+        int replyCounter = 0;
+
+        const string manufacturer = "Ultra Combos Co., Ltd.";
 
         ConcurrentQueue<NewPacketEventArgs<ArtNetPacket>> receivedQueue = new ConcurrentQueue<NewPacketEventArgs<ArtNetPacket>>();
 
@@ -52,14 +58,39 @@ namespace UltraCombos.ArtNet
         }
         #endregion
 
+        private void Awake()
+        {
+            localIp = IPAddress.Parse(host);
+            localSubnetMask = Utility.GetSubnetMask(localIp);
+
+            pollReply = new ArtPollReplyPacket()
+            {
+                EstaCode = 0x7A70, // 0x7AA0
+                GoodInput = new byte[4],
+                IpAddress = localIp.GetAddressBytes(),
+                LongName = SystemInfo.deviceName,
+                ShortName = SystemInfo.deviceName,
+                MacAddress = Utility.GetPhysicalAddress().GetAddressBytes(),
+                Oem = 0x2828, // 0x04b4
+                PortCount = 1,
+                PortTypes = new byte[4],
+            };
+
+            var bits = new BitArray(new bool[8] { false, false, false, false, false, false, false, true });
+            pollReply.GoodInput[0] = Utility.ConvertToByte(bits);
+
+            bits = new BitArray(new bool[8] { true, false, true, false, false, false, true, false });
+            pollReply.PortTypes[0] = Utility.ConvertToByte(bits);
+        }
+
         private void OnEnable()
         {
-            var man = Crc16.ComputeHash("Ultra Combos Co., Ltd.");
+            var man = Crc16.ComputeHash(manufacturer);
             var dev = Crc16.ComputeHash(SystemInfo.deviceName);
             var rdmId = new LXProtocols.Acn.Rdm.UId(man, dev);
             socket = new ArtNetSocket(rdmId);
             socket.NewPacket += OnNewPacket;
-            socket.Open(IPAddress.Parse(localIp), IPAddress.Parse(localSubnetMask));
+            socket.Open(localIp, localSubnetMask);
         }
 
         private void OnDisable()
@@ -67,7 +98,7 @@ namespace UltraCombos.ArtNet
             if (socket != null)
             {
                 socket.NewPacket -= OnNewPacket;
-                socket.Shutdown(System.Net.Sockets.SocketShutdown.Both);
+                socket.Shutdown(SocketShutdown.Both);
                 socket = null;
             }
         }
@@ -100,12 +131,20 @@ namespace UltraCombos.ArtNet
                         break;
                     case ArtNetOpCodes.Poll:
                         {
-                            //Debug.LogError(res.Packet.OpCode);
+                            pollReply.NodeReport = $"#0001 [{replyCounter:D4}] LXProtocols.ArtNet";
+                            replyCounter = (replyCounter + 1) % 10000;
+                            StartCoroutine(SendDelay(Random.value));
+                        }
+                        break;
+                    case ArtNetOpCodes.PollReply:
+                        {
+                            //var reply = res.Packet as ArtPollReplyPacket;
+                            //Debug.LogError($"{reply.LongName}");
                         }
                         break;
                     default:
                         {
-                            Debug.LogError(res.Packet.OpCode);
+                            //Debug.LogError(res.Packet.OpCode);
                         }
                         break;
                 }
@@ -121,6 +160,14 @@ namespace UltraCombos.ArtNet
         {
             receivedQueue.Enqueue(e);
         }
+
+        private IEnumerator SendDelay(float seconds)
+        {
+            yield return new WaitForSeconds(seconds);
+            socket.Send(pollReply);
+        }
     }
+
+
 }
 
