@@ -1,10 +1,13 @@
 {
   "name": "com.ultracombos.art-net",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "displayName": "Art Net",
   "description": "Art Net",
-  "repository": "",
-  "type": "library",
+  "repository": "https://github.com/UltraCombos/com.ultracombos.art-net.git",
+  "type": "tool",
+	  "publishConfig": {
+		"registry": "http://nas.ultracombos.com:4873"
+	  },
   "author": {
     "name": "Ultra Combos Co., Ltd.",
     "email": "tech@ultracombos.com",
