@@ -166,6 +166,24 @@ namespace UltraCombos.ArtNet
             yield return new WaitForSeconds(seconds);
             socket.Send(pollReply);
         }
+
+        private void OnGUI()
+        {
+            var col = 32;
+            var size = new Vector2(30, 30);
+            foreach (var universe in Data.Keys)
+            {
+                var dmx = Data[universe].data;
+                for (int i = 0; i < 512; ++i)
+                {
+                    float width = size.x;
+                    float height = size.y * dmx[i] / 255.0f;
+                    float x = i % col * size.x;
+                    float y = i / col * size.y + size.y - height;
+                    GUI.DrawTexture(new Rect(x, y, width, height), Texture2D.whiteTexture, ScaleMode.StretchToFill, false, 1, Color.cyan, 0, 0);
+                }
+            }
+        }
     }
 
 
