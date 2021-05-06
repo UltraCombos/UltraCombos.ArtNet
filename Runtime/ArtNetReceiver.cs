@@ -22,7 +22,7 @@ namespace UltraCombos.ArtNet
 
     public class ArtNetReceiver : MonoBehaviour
     {
-        public string host = "10.0.0.100";
+        public string m_Host = "10.0.0.100";
         IPAddress localIp;
         IPAddress localSubnetMask;
 
@@ -60,7 +60,7 @@ namespace UltraCombos.ArtNet
 
         private void Awake()
         {
-            localIp = IPAddress.Parse(host);
+            localIp = IPAddress.Parse(m_Host);
             localSubnetMask = Utility.GetSubnetMask(localIp);
 
             pollReply = new ArtPollReplyPacket()
@@ -105,54 +105,52 @@ namespace UltraCombos.ArtNet
 
         private void Update()
         {
-            if (receivedQueue.TryDequeue(out var res))
-            {
-                switch (res.Packet.OpCode)
-                {
-                    case ArtNetOpCodes.Dmx:
-                        {
-                            var dmx = res.Packet as ArtNetDmxPacket;
-                            short universe = dmx.Universe;
-                            if (Data.ContainsKey(universe) == false)
-                            {
-                                Data.Add(universe, new Packet()
-                                {
-                                    data = new byte[512],
-                                    //data = new NativeArray<byte>( 512, Allocator.Persistent ),
-                                });
-                            }
-                            var package = Data[universe];
-                            package.sequence = dmx.Sequence;
-                            package.physical = dmx.Physical;
-                            package.universe = universe;
-                            dmx.DmxData.CopyTo(package.data, 0);
-                            //package.data.CopyFrom( dmx.DmxData );
-                        }
-                        break;
-                    case ArtNetOpCodes.Poll:
-                        {
-                            pollReply.NodeReport = $"#0001 [{replyCounter:D4}] LXProtocols.ArtNet";
-                            replyCounter = (replyCounter + 1) % 10000;
-                            StartCoroutine(SendDelay(Random.value));
-                        }
-                        break;
-                    case ArtNetOpCodes.PollReply:
-                        {
-                            //var reply = res.Packet as ArtPollReplyPacket;
-                            //Debug.LogError($"{reply.LongName}");
-                        }
-                        break;
-                    default:
-                        {
-                            //Debug.LogError(res.Packet.OpCode);
-                        }
-                        break;
-                }
-            }
-
             while (receivedQueue.Count > 0)
             {
-                receivedQueue.TryDequeue(out _);
+                if (receivedQueue.TryDequeue(out var res))
+                {
+                    switch (res.Packet.OpCode)
+                    {
+                        case ArtNetOpCodes.Dmx:
+                            {
+                                var dmx = res.Packet as ArtNetDmxPacket;
+                                short universe = dmx.Universe;
+                                if (Data.ContainsKey(universe) == false)
+                                {
+                                    Data.Add(universe, new Packet()
+                                    {
+                                        data = new byte[512],
+                                        //data = new NativeArray<byte>( 512, Allocator.Persistent ),
+                                    });
+                                }
+                                var package = Data[universe];
+                                package.sequence = dmx.Sequence;
+                                package.physical = dmx.Physical;
+                                package.universe = universe;
+                                dmx.DmxData.CopyTo(package.data, 0);
+                                //package.data.CopyFrom( dmx.DmxData );
+                            }
+                            break;
+                        case ArtNetOpCodes.Poll:
+                            {
+                                pollReply.NodeReport = $"#0001 [{replyCounter:D4}] LXProtocols.ArtNet";
+                                replyCounter = (replyCounter + 1) % 10000;
+                                StartCoroutine(SendDelay(Random.value));
+                            }
+                            break;
+                        case ArtNetOpCodes.PollReply:
+                            {
+                                //var reply = res.Packet as ArtPollReplyPacket;
+                                //Debug.LogError($"{reply.LongName}");
+                            }
+                            break;
+                        default:
+                            {
+                                //Debug.LogError(res.Packet.OpCode);
+                            }
+                            break;
+                    }
+                }
             }
         }
 
@@ -167,23 +165,7 @@ namespace UltraCombos.ArtNet
             socket.Send(pollReply);
         }
 
-        private void OnGUI()
-        {
-            var col = 32;
-            var size = new Vector2(30, 30);
-            foreach (var universe in Data.Keys)
-            {
-                var dmx = Data[universe].data;
-                for (int i = 0; i < 512; ++i)
-                {
-                    float width = size.x;
-                    float height = size.y * dmx[i] / 255.0f;
-                    float x = i % col * size.x;
-                    float y = i / col * size.y + size.y - height;
-                    GUI.DrawTexture(new Rect(x, y, width, height), Texture2D.whiteTexture, ScaleMode.StretchToFill, false, 1, Color.cyan, 0, 0);
-                }
-            }
-        }
+        
     }
 
 
