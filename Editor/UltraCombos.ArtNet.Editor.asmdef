@@ -1,0 +1,16 @@
+{
+    "name": "UltraCombos.ArtNet.Editor",
+    "rootNamespace": "UltraCombos.ArtNet",
+    "references": [
+        "GUID:8487b7442921f2a48b6d51ab04bd7895"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

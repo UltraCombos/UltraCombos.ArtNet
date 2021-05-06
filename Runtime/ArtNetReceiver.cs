@@ -9,6 +9,7 @@ using System.Net;
 using System.Net.Sockets;
 using Unity.Collections;
 using UnityEngine;
+using UnityEngine.Events;
 
 namespace UltraCombos.ArtNet
 {
@@ -20,6 +21,7 @@ namespace UltraCombos.ArtNet
         public byte[] data;
     }
 
+    [ExecuteAlways]
     public class ArtNetReceiver : MonoBehaviour
     {
         public string m_Host = "10.0.0.100";
@@ -35,6 +37,9 @@ namespace UltraCombos.ArtNet
         ConcurrentQueue<NewPacketEventArgs<ArtNetPacket>> receivedQueue = new ConcurrentQueue<NewPacketEventArgs<ArtNetPacket>>();
 
         public Dictionary<short, Packet> Data = new Dictionary<short, Packet>();
+
+        [Space]
+        public UnityEvent onDataUpdated = new UnityEvent();
 
         #region Singleton
         private static ArtNetReceiver instance;
@@ -58,43 +63,50 @@ namespace UltraCombos.ArtNet
         }
         #endregion
 
-        private void Awake()
+        private void OnEnable()
         {
             localIp = IPAddress.Parse(m_Host);
             localSubnetMask = Utility.GetSubnetMask(localIp);
-
-            pollReply = new ArtPollReplyPacket()
-            {
-                EstaCode = 0x7A70, // 0x7AA0
-                GoodInput = new byte[4],
-                IpAddress = localIp.GetAddressBytes(),
-                LongName = SystemInfo.deviceName,
-                ShortName = SystemInfo.deviceName,
-                MacAddress = Utility.GetPhysicalAddress().GetAddressBytes(),
-                Oem = 0x2828, // 0x04b4
-                PortCount = 1,
-                PortTypes = new byte[4],
-            };
-
-            var bits = new BitArray(new bool[8] { false, false, false, false, false, false, false, true });
-            pollReply.GoodInput[0] = Utility.ConvertToByte(bits);
-
-            bits = new BitArray(new bool[8] { true, false, true, false, false, false, true, false });
-            pollReply.PortTypes[0] = Utility.ConvertToByte(bits);
-        }
-
-        private void OnEnable()
-        {
             var man = Crc16.ComputeHash(manufacturer);
             var dev = Crc16.ComputeHash(SystemInfo.deviceName);
             var rdmId = new LXProtocols.Acn.Rdm.UId(man, dev);
             socket = new ArtNetSocket(rdmId);
             socket.NewPacket += OnNewPacket;
             socket.Open(localIp, localSubnetMask);
+
+            if (pollReply == null)
+            {
+                pollReply = new ArtPollReplyPacket()
+                {
+                    EstaCode = 0x7A70, // 0x7AA0
+                    GoodInput = new byte[4],
+                    IpAddress = localIp.GetAddressBytes(),
+                    LongName = SystemInfo.deviceName,
+                    ShortName = SystemInfo.deviceName,
+                    MacAddress = Utility.GetPhysicalAddress().GetAddressBytes(),
+                    Oem = 0x2828, // 0x04b4
+                    PortCount = 1,
+                    PortTypes = new byte[4],
+                };
+
+                var bits = new BitArray(new bool[8] { false, false, false, false, false, false, false, true });
+                pollReply.GoodInput[0] = Utility.ConvertToByte(bits);
+
+                bits = new BitArray(new bool[8] { true, false, true, false, false, false, true, false });
+                pollReply.PortTypes[0] = Utility.ConvertToByte(bits);
+            }
+
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.update += () => UnityEditor.EditorApplication.QueuePlayerLoopUpdate();
+#endif
         }
 
         private void OnDisable()
         {
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.update -= () => UnityEditor.EditorApplication.QueuePlayerLoopUpdate();
+#endif
+
             if (socket != null)
             {
                 socket.NewPacket -= OnNewPacket;
@@ -105,6 +117,7 @@ namespace UltraCombos.ArtNet
 
         private void Update()
         {
+            bool isUpdated = false;
             while (receivedQueue.Count > 0)
             {
                 if (receivedQueue.TryDequeue(out var res))
@@ -113,6 +126,7 @@ namespace UltraCombos.ArtNet
                     {
                         case ArtNetOpCodes.Dmx:
                             {
+                                isUpdated = true;
                                 var dmx = res.Packet as ArtNetDmxPacket;
                                 short universe = dmx.Universe;
                                 if (Data.ContainsKey(universe) == false)
@@ -152,6 +166,11 @@ namespace UltraCombos.ArtNet
                     }
                 }
             }
+
+            if (isUpdated)
+            {
+                onDataUpdated.Invoke();
+            }
         }
 
         private void OnNewPacket(object sender, NewPacketEventArgs<ArtNetPacket> e)
@@ -165,7 +184,7 @@ namespace UltraCombos.ArtNet
             socket.Send(pollReply);
         }
 
-        
+
     }
 
 

@@ -1,39 +1,48 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using UnityEditor;
 using UnityEngine;
 
 namespace UltraCombos.ArtNet
 {
-    [RequireComponent(typeof(ArtNetReceiver))]
-    public class ArtNetReceiverVisualizer : MonoBehaviour
+    public class ArtNetMonitorWindow : EditorWindow
     {
-        ArtNetReceiver receiver;
-
-        public bool m_DrawDebug = false;
-        [Range(0, 5)]
-        public float m_DebugScale = 1;
+        short displayUniverse = -1;
+        Texture2D tex;
         GUIStyle barStyle;
         GUIStyle buttonStyle;
+
         Color baseColor;
         Color deactiveColor;
         Color activeColor;
-        Texture2D tex;
-        short displayUniverse = -1;
 
-        private void Awake()
+        [MenuItem("Window/ArtNet Monitor")]
+        public static void ShowWindow()
         {
-            receiver = GetComponent<ArtNetReceiver>();
-
-            baseColor = new Color32(230, 158, 160, 200);
-            deactiveColor = new Color32(128, 128, 128, 200);
-            activeColor = new Color32(141, 162, 216, 255);
+            GetWindow<ArtNetMonitorWindow>("ArtNet Monitor");
+            //GetWindowWithRect<ArtNetMonitorWindow>(new Rect(0, 0, 1120, 630), true, "ArtNet Monitor");
         }
+
+        private void OnEnable()
+        {
+            ArtNetReceiver.Instance.onDataUpdated.AddListener(OnDataUpdated);
+        }
+
+        private void OnDisable()
+        {
+            ArtNetReceiver.Instance.onDataUpdated.RemoveListener(OnDataUpdated);
+        }
+
+        private void OnDataUpdated()
+        {
+            Repaint();
+        }
+
 
         private void OnGUI()
         {
-            if (m_DrawDebug == false || m_DebugScale < Mathf.Epsilon)
-                return;
+            var receiver = ArtNetReceiver.Instance;
 
             if (receiver.Data.ContainsKey(displayUniverse) == false)
             {
@@ -45,6 +54,10 @@ namespace UltraCombos.ArtNet
                 if (receiver.Data.Count > 0)
                 {
                     displayUniverse = receiver.Data.Keys.First();
+                    
+                    baseColor = new Color32(217, 137, 119, 255);
+                    deactiveColor = new Color32(128, 128, 128, 255);
+                    activeColor = new Color32(217, 171, 154, 255);
                 }
                 else
                 {
@@ -56,7 +69,7 @@ namespace UltraCombos.ArtNet
             {
                 tex = Texture2D.whiteTexture;
             }
-
+            
             if (barStyle == null)
             {
                 barStyle = new GUIStyle();
@@ -74,13 +87,22 @@ namespace UltraCombos.ArtNet
             }
 
             var mtx = GUI.matrix;
+            float dim = position.width / 37;
+            barStyle.fontSize = Mathf.FloorToInt(dim * 0.4f);
 
-            GUI.matrix = Matrix4x4.TRS(new Vector3(30, 30, 0), Quaternion.identity, Vector3.one * m_DebugScale);
+            GUI.matrix = Matrix4x4.TRS(new Vector3(dim, dim, 0), Quaternion.identity, Vector3.one);
 
             using (var vScp = new GUILayout.VerticalScope())
             {
                 using (var hScp = new GUILayout.HorizontalScope())
                 {
+                    GUI.backgroundColor = Color.black;
+                    if (GUILayout.Button("Reload", buttonStyle, GUILayout.Width(60), GUILayout.Height(40)))
+                    {
+                        receiver.onDataUpdated.RemoveListener(OnDataUpdated);
+                        receiver.onDataUpdated.AddListener(OnDataUpdated);
+                    }
+
                     foreach (var universe in receiver.Data.Keys)
                     {
                         GUI.backgroundColor = displayUniverse == universe ? baseColor : deactiveColor;
@@ -91,25 +113,25 @@ namespace UltraCombos.ArtNet
                     }
                 }
 
-                GUI.matrix = Matrix4x4.Translate(new Vector3(0, 50 * m_DebugScale, 0)) * GUI.matrix;
-
+                GUI.matrix = Matrix4x4.Translate(new Vector3(0, 50, 0)) * GUI.matrix;
 
                 const int column = 32;
                 const int channels = 512;
-                var size = new Vector2(30, 30);
+
+                var size = new Vector2(dim, dim);
                 float gap = 1.1f;
                 for (int i = 0; i < channels; ++i)
                 {
                     float x = i % column * size.x * gap;
                     float y = i / column * size.y * gap;
-                    var position = new Rect(x, y, size.x, size.y);
+                    var channelPos = new Rect(x, y, size.x, size.y);
                     float width = size.x;
                     float height = size.y * receiver.Data[displayUniverse].data[i] / 255.0f;
                     y += size.y - height;
-                    var bar = new Rect(x, y, width, height);
-                    GUI.DrawTexture(position, tex, ScaleMode.StretchToFill, true, 1, baseColor, 0, 0);
-                    GUI.DrawTexture(bar, tex, ScaleMode.StretchToFill, false, 1, activeColor, 0, 0);
-                    GUI.Label(position, $"{i:D3}", barStyle);
+                    var valuePos = new Rect(x, y, width, height);
+                    GUI.DrawTexture(channelPos, tex, ScaleMode.StretchToFill, true, 1, baseColor, 0, 0);
+                    GUI.DrawTexture(valuePos, tex, ScaleMode.StretchToFill, false, 1, activeColor, 0, 0);
+                    GUI.Label(channelPos, $"{i:D3}", barStyle);
                 }
             }
 
@@ -118,5 +140,4 @@ namespace UltraCombos.ArtNet
 
         }
     }
-
 }
