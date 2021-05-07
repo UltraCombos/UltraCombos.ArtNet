@@ -16,7 +16,7 @@ namespace UltraCombos.ArtNet
             {
                 BindFieldAttribute attribute = (BindFieldAttribute)base.attribute;
 
-                var binder = property.serializedObject.targetObject as ArtNetFloatBinder;
+                var binder = property.serializedObject.targetObject as ArtNetBinderBase;
                 if (string.IsNullOrEmpty(binder.m_TypeName))
                 {
                     OnInvalid(position, property, "Select object name first.");
@@ -32,9 +32,11 @@ namespace UltraCombos.ArtNet
                     else
                     {
                         var flag = BindingFlags.Instance | BindingFlags.Public;
-                        var fields = comp.GetType().GetFields(flag);
+                        var fields = from field in comp.GetType().GetFields(flag) 
+                                     where field.FieldType == binder.FieldType
+                                     select field;
 
-                        if (fields.Length == 0)
+                        if (fields.Count() == 0)
                         {
                             OnInvalid(position, property, "No valid field is founded.");
                         }
