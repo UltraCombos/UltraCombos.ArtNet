@@ -13,7 +13,7 @@ namespace UltraCombos.ArtNet
         public short m_Universe = 1;
         [Range(1, 512)]
         public short m_Channel = 1;
-        public Object m_Target = null;
+        public GameObject m_Target = null;
         [BindObject]
         public string m_TypeName;
         string lastObjectName;

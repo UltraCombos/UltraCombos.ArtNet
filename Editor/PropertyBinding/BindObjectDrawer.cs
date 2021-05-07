@@ -15,7 +15,7 @@ namespace UltraCombos.ArtNet
             {
                 BindObjectAttribute attribute = (BindObjectAttribute)base.attribute;
 
-                var binder = property.serializedObject.targetObject as ArtNetFloatBinder;
+                var binder = property.serializedObject.targetObject as ArtNetBinderBase;
                 if (binder.m_Target == null)
                 {
                     OnInvalid(position, property, "Object is not assigned.");
