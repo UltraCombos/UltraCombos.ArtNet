@@ -127,7 +127,6 @@ namespace UltraCombos.ArtNet
                     var channelPos = new Rect(x, y, size.x, size.y);
                     float width = size.x;
                     float height = size.y * receiver.Data[displayUniverse].data[i] / 255.0f;
-                    y += size.y - height;
                     var valuePos = new Rect(x, y, width, height);
                     GUI.DrawTexture(channelPos, tex, ScaleMode.StretchToFill, true, 1, baseColor, 0, 0);
                     GUI.DrawTexture(valuePos, tex, ScaleMode.StretchToFill, false, 1, activeColor, 0, 0);

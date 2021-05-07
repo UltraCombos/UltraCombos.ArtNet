@@ -9,12 +9,13 @@ namespace UltraCombos.ArtNet
     public class ArtNetFloatBinder : ArtNetBinderBase
     {
         public Object m_Target = null;
-        public string m_ObjectName;
+        [BindObject]
+        public string m_TypeName;
+        string lastObjectName;
+        [BindField]
         public string m_FieldName;
+        string lastFieldName;
         public Vector2 m_MinMax = new Vector2(0, 1);
-
-        object obj = null;
-        FieldInfo field = null;
 
         private void Update()
         {
@@ -27,21 +28,24 @@ namespace UltraCombos.ArtNet
             {
                 var go = m_Target as GameObject;
 
-                var comp = System.Array.Find(go.GetComponents<Component>(), c => c.GetType().Name == m_ObjectName);
+                var comp = System.Array.Find(go.GetComponents<Component>(), c => c.GetType().Name == m_TypeName);
                 if (comp != null)
                 {
-                    var flag = BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public;
+                    var flag = BindingFlags.Instance | BindingFlags.Public;
                     var f = System.Array.Find(comp.GetType().GetFields(flag), f => f.Name == m_FieldName);
                     if (f != null)
                     {
                         field = f;
                         obj = comp;
 
-                        foreach (var attr in field.GetCustomAttributes(typeof(RangeAttribute)))
+                        field.GetCustomAttributes(typeof(RangeAttribute)).ToList().ForEach(attr =>
                         {
                             var range = attr as RangeAttribute;
                             m_MinMax.Set(range.min, range.max);
-                        }
+                        });
+
+                        lastObjectName = m_TypeName;
+                        lastFieldName = m_FieldName;
                     }
                 }
             }
@@ -49,6 +53,14 @@ namespace UltraCombos.ArtNet
 
         public override bool IsValid()
         {
+            if (string.IsNullOrEmpty(m_TypeName) || lastObjectName != m_TypeName)
+            {
+                obj = null;
+            }
+            if (string.IsNullOrEmpty(m_FieldName) || lastFieldName != m_FieldName)
+            {
+                field = null;
+            }
             return obj != null && field != null;
         }
 
