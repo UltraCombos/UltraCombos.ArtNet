@@ -33,6 +33,7 @@ namespace UltraCombos.ArtNet
         int replyCounter = 0;
 
         const string manufacturer = "Ultra Combos Co., Ltd.";
+        bool isInitialized = false;
 
         ConcurrentQueue<NewPacketEventArgs<ArtNetPacket>> receivedQueue = new ConcurrentQueue<NewPacketEventArgs<ArtNetPacket>>();
 
@@ -65,37 +66,6 @@ namespace UltraCombos.ArtNet
 
         private void OnEnable()
         {
-            localIp = IPAddress.Parse(m_Host);
-            localSubnetMask = Utility.GetSubnetMask(localIp);
-            var man = Crc16.ComputeHash(manufacturer);
-            var dev = Crc16.ComputeHash(SystemInfo.deviceName);
-            var rdmId = new LXProtocols.Acn.Rdm.UId(man, dev);
-            socket = new ArtNetSocket(rdmId);
-            socket.NewPacket += OnNewPacket;
-            socket.Open(localIp, localSubnetMask);
-
-            if (pollReply == null)
-            {
-                pollReply = new ArtPollReplyPacket()
-                {
-                    EstaCode = 0x7A70, // 0x7AA0
-                    GoodInput = new byte[4],
-                    IpAddress = localIp.GetAddressBytes(),
-                    LongName = SystemInfo.deviceName,
-                    ShortName = SystemInfo.deviceName,
-                    MacAddress = Utility.GetPhysicalAddress().GetAddressBytes(),
-                    Oem = 0x2828, // 0x04b4
-                    PortCount = 1,
-                    PortTypes = new byte[4],
-                };
-
-                var bits = new BitArray(new bool[8] { false, false, false, false, false, false, false, true });
-                pollReply.GoodInput[0] = Utility.ConvertToByte(bits);
-
-                bits = new BitArray(new bool[8] { true, false, true, false, false, false, true, false });
-                pollReply.PortTypes[0] = Utility.ConvertToByte(bits);
-            }
-
 #if UNITY_EDITOR
             UnityEditor.EditorApplication.update += () => UnityEditor.EditorApplication.QueuePlayerLoopUpdate();
 #endif
@@ -113,10 +83,49 @@ namespace UltraCombos.ArtNet
                 socket.Shutdown(SocketShutdown.Both);
                 socket = null;
             }
+
+            isInitialized = false;
         }
 
         private void Update()
         {
+            if (isInitialized == false)
+            {
+                localIp = IPAddress.Parse(m_Host);
+                localSubnetMask = Utility.GetSubnetMask(localIp);
+                var man = Crc16.ComputeHash(manufacturer);
+                var dev = Crc16.ComputeHash(SystemInfo.deviceName);
+                var rdmId = new LXProtocols.Acn.Rdm.UId(man, dev);
+                socket = new ArtNetSocket(rdmId);
+                socket.NewPacket += OnNewPacket;
+                socket.Open(localIp, localSubnetMask);
+
+                if (pollReply == null)
+                {
+                    pollReply = new ArtPollReplyPacket()
+                    {
+                        EstaCode = 0x7A70, // 0x7AA0
+                        GoodInput = new byte[4],
+                        IpAddress = localIp.GetAddressBytes(),
+                        LongName = SystemInfo.deviceName,
+                        ShortName = SystemInfo.deviceName,
+                        MacAddress = Utility.GetPhysicalAddress().GetAddressBytes(),
+                        Oem = 0x2828, // 0x04b4
+                        PortCount = 1,
+                        PortTypes = new byte[4],
+                    };
+
+                    var bits = new BitArray(new bool[8] { false, false, false, false, false, false, false, true });
+                    pollReply.GoodInput[0] = Utility.ConvertToByte(bits);
+
+                    bits = new BitArray(new bool[8] { true, false, true, false, false, false, true, false });
+                    pollReply.PortTypes[0] = Utility.ConvertToByte(bits);
+                }
+
+                isInitialized = true;
+                Debug.Log("ArtNetReveicer is initialized.");
+            }
+
             bool isUpdated = false;
             while (receivedQueue.Count > 0)
             {
