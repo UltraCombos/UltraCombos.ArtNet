@@ -44,9 +44,13 @@ namespace UltraCombos.ArtNet
             EditorGUILayout.PropertyField(m_Universe);
             EditorGUILayout.PropertyField(m_Channel);
             EditorGUILayout.PropertyField(m_Target);
-            DrawTypeName();
-            DrawFieldName();
-            DrawTypeProperties();
+
+            if (binder.m_Target != null)
+            {
+                DrawTypeName();
+                DrawFieldName();
+                DrawTypeProperties();
+            }
 
             serializedObject.ApplyModifiedProperties();
         }

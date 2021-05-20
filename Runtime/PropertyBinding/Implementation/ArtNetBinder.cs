@@ -60,7 +60,7 @@ namespace UltraCombos.ArtNet
                 return;
             }
 
-            if (m_Target is GameObject)
+            if (m_Target != null && m_Target is GameObject)
             {
                 var go = m_Target as GameObject;
 
