@@ -24,7 +24,9 @@ namespace UltraCombos.ArtNet
     [ExecuteAlways]
     public class ArtNetReceiver : MonoBehaviour
     {
-        public string m_Host = "10.0.0.100";
+        public string m_Host = "2.0.0.100";
+
+        int aaa = 123;
         IPAddress localIp;
         IPAddress localSubnetMask;
 

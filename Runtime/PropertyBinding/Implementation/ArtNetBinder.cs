@@ -9,7 +9,7 @@ namespace UltraCombos.ArtNet
     [ExecuteAlways]
     public class ArtNetBinder : MonoBehaviour
     {
-        [Range(1, 512)]
+        [Range(0, 512)]
         public short m_Universe = 1;
         [Range(1, 512)]
         public short m_Channel = 1;
