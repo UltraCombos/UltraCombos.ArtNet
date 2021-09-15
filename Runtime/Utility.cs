@@ -73,7 +73,8 @@ namespace UltraCombos.ArtNet
                     }
                 }
             }
-            throw new System.ArgumentException(string.Format("Can't find subnetmask for IP address '{0}'", address));
+            // throw new System.ArgumentException(string.Format("Can't find subnetmask for IP address '{0}'", address));
+            return IPAddress.Any;
         }
 
         public static PhysicalAddress GetPhysicalAddress()

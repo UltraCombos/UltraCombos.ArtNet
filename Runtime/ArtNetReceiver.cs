@@ -26,7 +26,6 @@ namespace UltraCombos.ArtNet
     {
         public string m_Host = "2.0.0.100";
 
-        int aaa = 123;
         IPAddress localIp;
         IPAddress localSubnetMask;
 
@@ -81,8 +80,11 @@ namespace UltraCombos.ArtNet
 
             if (socket != null)
             {
+                if (socket.PortOpen) 
+                {
+                    socket.Shutdown(SocketShutdown.Both);
+                }
                 socket.NewPacket -= OnNewPacket;
-                socket.Shutdown(SocketShutdown.Both);
                 socket = null;
             }
 
@@ -100,7 +102,14 @@ namespace UltraCombos.ArtNet
                 var rdmId = new LXProtocols.Acn.Rdm.UId(man, dev);
                 socket = new ArtNetSocket(rdmId);
                 socket.NewPacket += OnNewPacket;
-                socket.Open(localIp, localSubnetMask);
+                try
+                {
+                    socket.Open(localIp, localSubnetMask);
+                }
+                catch (System.Exception e)
+                {
+                    // Debug.LogError(e.Message);
+                }
 
                 if (pollReply == null)
                 {
@@ -124,8 +133,11 @@ namespace UltraCombos.ArtNet
                     pollReply.PortTypes[0] = Utility.ConvertToByte(bits);
                 }
 
-                isInitialized = true;
-                Debug.Log("ArtNetReveicer is initialized.");
+                if (socket.PortOpen)
+                {
+                    isInitialized = true;
+                    Debug.Log("ArtNetReveicer is initialized.");
+                }
             }
 
             bool isUpdated = false;
