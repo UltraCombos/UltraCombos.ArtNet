@@ -1,0 +1,21 @@
+# https://www.notion.so/ultracombos/NAS-Verdaccio-Github-Action-184580d56c5f4b30b7777fd241b41b48
+name: Publish to Verdaccio
+on: push
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - uses: EndBug/version-check@v1
+        id: check
+        with:
+          diff-search: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v1
+        if: steps.check.outputs.changed == 'true'
+        with:
+          node-version: 12
+      - run: yarn publish --registry ${{ secrets.VERDACCIO_URL }}
+        if: steps.check.outputs.changed == 'true'
+        env:
+          NPM_AUTH_TOKEN: ${{ secrets.VERDACCIO_NPM_AUTH_TOKEN }}
