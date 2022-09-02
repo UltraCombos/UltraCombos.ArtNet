@@ -24,16 +24,10 @@ namespace UltraCombos.ArtNet
 	[ExecuteAlways]
 	public class ArtNetReceiver : MonoBehaviour
 	{
-		const string manufacturer = "Ultra Combos Co., Ltd.";
-
 		[SerializeField] string _Host = "2.0.0.100";
 
-		IPAddress localIp;
-		IPAddress localSubnetMask;
-		ArtNetSocket socket;
 		ArtPollReplyPacket pollReply;
 		int replyCounter = 0;
-		bool isInitialized = false;
 		ConcurrentQueue<NewPacketEventArgs<ArtNetPacket>> queue = new ConcurrentQueue<NewPacketEventArgs<ArtNetPacket>>();
 
 		public string Host => _Host;
@@ -43,34 +37,13 @@ namespace UltraCombos.ArtNet
 		[Space]
 		public UnityEvent onDataUpdated = new UnityEvent();
 
-		#region Singleton
-		private static ArtNetReceiver instance;
-
-		public static ArtNetReceiver Instance
-		{
-			get
-			{
-				if ( instance == null )
-				{
-					instance = FindObjectOfType<ArtNetReceiver>();
-					if ( instance == null )
-					{
-						GameObject go = new GameObject();
-						go.name = typeof( ArtNetReceiver ).Name;
-						instance = go.AddComponent<ArtNetReceiver>();
-					}
-				}
-				return instance;
-			}
-		}
-		#endregion
-
 		private void OnEnable()
 		{
 #if UNITY_EDITOR
 			UnityEditor.EditorApplication.update += () => UnityEditor.EditorApplication.QueuePlayerLoopUpdate();
 #endif
 			Release();
+			Initialize();
 		}
 
 		private void OnDisable()
@@ -81,81 +54,52 @@ namespace UltraCombos.ArtNet
 			Release();
 		}
 
+		private void OnValidate()
+		{
+			Release();
+			Initialize();
+		}
+
 		private void Log(string msg, LogType type = LogType.Log)
 		{
 			Debug.unityLogger.Log( type, $"<b>[ArtNet Receiver]</b> {msg}" );
 		}
 
+		private void Initialize()
+		{
+			var server = ArtNetMaster.GetSharedServer( _Host );
+			if ( server != null ) server.OnNewPacket += OnNewPacket;
+		}
+
 		private void Release()
 		{
-			isInitialized = false;
-
-			if ( socket != null )
-			{
-				try
-				{
-					if ( socket.PortOpen )
-					{
-						socket.Shutdown( SocketShutdown.Both );
-					}
-					socket.NewPacket -= OnNewPacket;
-				}
-				catch ( System.Exception e )
-				{
-					Log( e.Message, LogType.Error );
-				}
-				
-				socket = null;
-			}			
+			var server = ArtNetMaster.GetSharedServer( _Host );
+			if ( server != null ) server.OnNewPacket -= OnNewPacket;
 		}
 
 		private void Update()
 		{
-			if ( isInitialized == false )
+			var server = ArtNetMaster.GetSharedServer( _Host );
+			if ( pollReply == null && server != null )
 			{
-				try
+				pollReply = new ArtPollReplyPacket()
 				{
-					localIp = IPAddress.Parse( _Host );
-					localSubnetMask = Utility.GetSubnetMask( localIp );
-					var manufacturerId = Crc16.ComputeHash( manufacturer );
-					var deviceId = Crc16.ComputeHash( SystemInfo.deviceName );
-					var rdmId = new LXProtocols.Acn.Rdm.UId( manufacturerId, deviceId );
-					socket = new ArtNetSocket( rdmId );
-					socket.NewPacket += OnNewPacket;
-					socket.Open( localIp, localSubnetMask );
+					EstaCode = 0x7A70, // 0x7AA0
+					GoodInput = new byte[4],
+					IpAddress = server.LocalIp.GetAddressBytes(),
+					LongName = SystemInfo.deviceName,
+					ShortName = SystemInfo.deviceName,
+					MacAddress = Utility.GetPhysicalAddress().GetAddressBytes(),
+					Oem = 0x2828, // 0x04b4
+					PortCount = 1,
+					PortTypes = new byte[4],
+				};
 
-					if ( pollReply == null )
-					{
-						pollReply = new ArtPollReplyPacket()
-						{
-							EstaCode = 0x7A70, // 0x7AA0
-							GoodInput = new byte[4],
-							IpAddress = localIp.GetAddressBytes(),
-							LongName = SystemInfo.deviceName,
-							ShortName = SystemInfo.deviceName,
-							MacAddress = Utility.GetPhysicalAddress().GetAddressBytes(),
-							Oem = 0x2828, // 0x04b4
-							PortCount = 1,
-							PortTypes = new byte[4],
-						};
+				var bits = new BitArray( new bool[8] { false, false, false, false, false, false, false, true } );
+				pollReply.GoodInput[0] = Utility.ConvertToByte( bits );
 
-						var bits = new BitArray( new bool[8] { false, false, false, false, false, false, false, true } );
-						pollReply.GoodInput[0] = Utility.ConvertToByte( bits );
-
-						bits = new BitArray( new bool[8] { true, false, true, false, false, false, true, false } );
-						pollReply.PortTypes[0] = Utility.ConvertToByte( bits );
-					}
-
-					if ( socket.PortOpen )
-					{
-						isInitialized = true;
-						Log( "is initialized." );
-					}
-				}
-				catch ( System.Exception e )
-				{
-					Log( e.Message, LogType.Error );
-				}				
+				bits = new BitArray( new bool[8] { true, false, true, false, false, false, true, false } );
+				pollReply.PortTypes[0] = Utility.ConvertToByte( bits );
 			}
 
 			bool isUpdated = false;
@@ -207,7 +151,7 @@ namespace UltraCombos.ArtNet
 					}
 				}
 			}
-			
+
 			if ( isUpdated )
 			{
 				onDataUpdated.Invoke();
@@ -215,18 +159,24 @@ namespace UltraCombos.ArtNet
 			}
 		}
 
-		private void OnNewPacket(object sender, NewPacketEventArgs<ArtNetPacket> e)
+		private void OnNewPacket(NewPacketEventArgs<ArtNetPacket> args)
 		{
-			queue.Enqueue( e );
+			queue.Enqueue( args );
 		}
 
 		private IEnumerator SendDelay(float seconds)
 		{
-			yield return new WaitForSeconds( seconds );
-			socket.Send( pollReply );
+			var server = ArtNetMaster.GetSharedServer( _Host );
+			if ( server == null || pollReply == null )
+			{
+				yield return null;
+			}
+			else
+			{
+				yield return new WaitForSeconds( seconds );
+				server.Send( pollReply );
+			}
 		}
-
-
 	}
 
 

@@ -6,7 +6,7 @@ using UnityEngine.UI;
 
 namespace UltraCombos
 {
-	[ExecuteInEditMode]
+	[ExecuteAlways]
 	public class Channel : MonoBehaviour
 	{
 		public Slider slider;

@@ -1,4 +1,7 @@
+using LXProtocols.Acn.Sockets;
+using LXProtocols.ArtNet.Packets;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
@@ -19,6 +22,10 @@ namespace UltraCombos.ArtNet
 		Color deactiveColor;
 		Color activeColor;
 
+		List<ArtNetServer> knownServers = new List<ArtNetServer>();
+		ConcurrentQueue<NewPacketEventArgs<ArtNetPacket>> queue = new ConcurrentQueue<NewPacketEventArgs<ArtNetPacket>>();
+		public Dictionary<short, Packet> data { get; private set; } = new Dictionary<short, Packet>();
+
 		[MenuItem( "Window/ArtNet Monitor" )]
 		public static void ShowWindow()
 		{
@@ -27,29 +34,62 @@ namespace UltraCombos.ArtNet
 
 		private void Update()
 		{
-			var receiver = ArtNetReceiver.Instance;
-
-			if ( dataFrame != receiver.DataFrame )
+			foreach ( var server in ArtNetServer.ServerList )
 			{
-				dataFrame = receiver.DataFrame;
+				if ( knownServers.Contains( server ) ) continue;
+				server.OnNewPacket += OnNewPacket;
+			}
+
+			knownServers.Clear();
+			foreach ( var server in ArtNetServer.ServerList ) knownServers.Add( server );
+
+			bool isUpdated = false;
+			if ( queue.TryDequeue( out var args ) )
+			{
+				if ( args.Packet.OpCode == LXProtocols.ArtNet.ArtNetOpCodes.Dmx )
+				{
+					isUpdated = true;
+					var dmx = args.Packet as ArtNetDmxPacket;
+					short universe = dmx.Universe;
+					if ( data.ContainsKey( universe ) == false )
+					{
+						data.Add( universe, new Packet()
+						{
+							data = new byte[512],
+						} );
+					}
+					var package = data[universe];
+					package.sequence = dmx.Sequence;
+					package.physical = dmx.Physical;
+					package.universe = universe;
+					dmx.DmxData.CopyTo( package.data, 0 );
+				}
+			}
+
+			if ( isUpdated )
+			{
 				Repaint();
 			}
 		}
 
+		private void OnNewPacket(NewPacketEventArgs<ArtNetPacket> args)
+		{
+			
+			queue.Enqueue( args );
+		}
+
 		private void OnGUI()
 		{
-			var receiver = ArtNetReceiver.Instance;
-
-			if ( receiver.Data.ContainsKey( displayUniverse ) == false )
+			if ( data.ContainsKey( displayUniverse ) == false )
 			{
 				displayUniverse = -1;
 			}
 
 			if ( displayUniverse < 0 )
 			{
-				if ( receiver.Data.Count > 0 )
+				if ( data.Count > 0 )
 				{
-					displayUniverse = receiver.Data.Keys.First();
+					displayUniverse = data.Keys.First();
 
 					baseColor = new Color32( 217, 137, 119, 255 );
 					deactiveColor = new Color32( 128, 128, 128, 255 );
@@ -94,7 +134,7 @@ namespace UltraCombos.ArtNet
 				{
 					GUI.backgroundColor = Color.black;
 
-					foreach ( var universe in receiver.Data.Keys )
+					foreach ( var universe in data.Keys )
 					{
 						GUI.backgroundColor = displayUniverse == universe ? baseColor : deactiveColor;
 						if ( GUILayout.Button( $"Universe {universe}", buttonStyle, GUILayout.Width( 100 ), GUILayout.Height( 40 ) ) )
@@ -117,7 +157,7 @@ namespace UltraCombos.ArtNet
 					float y = i / column * size.y * gap;
 					var channelPos = new Rect( x, y, size.x, size.y );
 					float width = size.x;
-					float height = size.y * receiver.Data[displayUniverse].data[i] / 255.0f;
+					float height = size.y * data[displayUniverse].data[i] / 255.0f;
 					var valuePos = new Rect( x, y, width, height );
 					GUI.DrawTexture( channelPos, tex, ScaleMode.StretchToFill, true, 1, baseColor, 0, 0 );
 					GUI.DrawTexture( valuePos, tex, ScaleMode.StretchToFill, false, 1, activeColor, 0, 0 );
