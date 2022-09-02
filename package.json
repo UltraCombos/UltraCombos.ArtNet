@@ -1,13 +1,13 @@
 {
   "name": "com.ultracombos.art-net",
-  "version": "1.0.1",
-  "displayName": "Art Net",
-  "description": "Art Net",
-  "repository": "https://github.com/UltraCombos/com.ultracombos.art-net.git",
+  "version": "1.0.2",
+  "displayName": "Art-Net",
+  "description": "Art-Net package for Unity",
+  "repository": "https://github.com/UltraCombos/UltraCombos.ArtNet.git",
   "type": "tool",
-	  "publishConfig": {
-		"registry": "http://nas.ultracombos.com:4873"
-	  },
+  "publishConfig": {
+    "registry": "https://verdaccio.ultracombos.net"
+  },
   "author": {
     "name": "Ultra Combos Co., Ltd.",
     "email": "tech@ultracombos.com",
